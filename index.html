@@ -1,0 +1,837 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QGIS / ArcGIS Web Workstation — Customer Spatial Inspector</title>
+    
+    <!-- Google Fonts: Inter & JetBrains Mono -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    }
+                }
+            }
+        }
+    </script>
+
+    <!-- Font Awesome 6 -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+
+    <!-- Leaflet 1.9.4 CSS & JS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+
+    <!-- SheetJS (xlsx.js) -->
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            overflow: hidden;
+            user-select: none;
+        }
+
+        .selectable-text {
+            user-select: text;
+        }
+
+        /* Custom Scrollbar ala Desktop GIS */
+        ::-webkit-scrollbar {
+            width: 5px;
+            height: 5px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f5f9;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+
+        /* Animasi Pulse Ring untuk Titik Aktif & Marker */
+        @keyframes gisPulseRing {
+            0% {
+                stroke-opacity: 0.9;
+                fill-opacity: 0.35;
+            }
+            50% {
+                stroke-opacity: 0.25;
+                fill-opacity: 0.1;
+            }
+            100% {
+                stroke-opacity: 0.9;
+                fill-opacity: 0.35;
+            }
+        }
+        .gis-pulse-ring {
+            animation: gisPulseRing 2s infinite ease-in-out;
+        }
+
+        /* Tooltip Permanen Label Titik di Peta */
+        .gis-feature-label {
+            background: rgba(15, 23, 42, 0.94) !important;
+            color: #f8fafc !important;
+            border: 1px solid rgba(148, 163, 184, 0.7) !important;
+            border-radius: 6px !important;
+            padding: 2px 7px !important;
+            font-family: 'Inter', sans-serif !important;
+            font-size: 11px !important;
+            font-weight: 600 !important;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4) !important;
+            white-space: nowrap !important;
+            pointer-events: auto !important;
+            cursor: pointer !important;
+        }
+        .gis-feature-label::before {
+            border-top-color: rgba(15, 23, 42, 0.94) !important;
+        }
+
+        /* Label Grid Koordinat (Graticule) */
+        .graticule-label {
+            background: rgba(255, 255, 255, 0.85);
+            color: #334155;
+            border: 1px solid #cbd5e1;
+            border-radius: 4px;
+            padding: 1px 4px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 9px;
+            font-weight: 600;
+            white-space: nowrap;
+            pointer-events: none;
+        }
+
+        /* Kustomisasi Leaflet Zoom Control agar menyatu dengan tema Workstation */
+        .leaflet-control-zoom {
+            border: 1px solid #cbd5e1 !important;
+            border-radius: 8px !important;
+            overflow: hidden;
+            box-shadow: 0 4px 12px rgba(15, 23, 42, 0.12) !important;
+        }
+        .leaflet-control-zoom a {
+            width: 30px !important;
+            height: 30px !important;
+            line-height: 30px !important;
+            color: #1e293b !important;
+            font-weight: 700 !important;
+        }
+    </style>
+</head>
+<body class="bg-slate-900 text-slate-800 h-screen flex flex-col">
+
+    <!-- Toast Notification -->
+    <div id="toastContainer" class="fixed bottom-10 left-1/2 -translate-x-1/2 z-[9999] flex flex-col gap-2 pointer-events-none"></div>
+
+    <!-- ===================================================================== -->
+    <!-- 1. TOP MENU & GIS WORKSTATION TOOLBAR (SLATE-900)                     -->
+    <!-- ===================================================================== -->
+    <header class="bg-slate-900 text-slate-100 border-b border-slate-700/80 shrink-0 z-30">
+        <!-- Baris 1: Title Bar & Data I/O -->
+        <div class="h-10 px-3 flex items-center justify-between border-b border-slate-800">
+            <div class="flex items-center gap-2.5">
+                <button id="toggleLeftPanelBtn" class="p-1.5 rounded hover:bg-slate-800 text-slate-300 hover:text-white transition" title="Toggle Layers & Feature Tree">
+                    <i class="fa-solid fa-layer-group text-sm text-sky-400"></i>
+                </button>
+                <div class="flex items-center gap-2">
+                    <span class="bg-emerald-600/20 border border-emerald-500/40 text-emerald-400 text-[10px] font-mono font-bold px-1.5 py-0.5 rounded">GIS PRO</span>
+                    <h1 class="text-xs sm:text-sm font-bold tracking-tight text-white truncate">
+                        SpatialGIS Pro <span class="hidden md:inline text-slate-400 font-normal">— Customer Spatial Inspector</span>
+                    </h1>
+                </div>
+            </div>
+
+            <!-- GitHub Live Sync, URL Config & Data I/O -->
+            <div class="flex items-center gap-1.5">
+                <!-- Status Sumber Data -->
+                <div id="sourceStatusBadge" class="hidden lg:flex items-center gap-1.5 bg-slate-800/90 border border-slate-700 px-2.5 py-1 rounded text-[10px] font-mono text-slate-300" title="Sumber Dataset Aktif">
+                    <span id="sourceStatusDot" class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
+                    <span id="sourceStatusText">Connecting GitHub...</span>
+                </div>
+
+                <!-- Tombol Sync GitHub -->
+                <button id="syncGithubBtn" onclick="fetchFromGitHub()" class="bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-semibold px-2.5 py-1 rounded flex items-center gap-1.5 transition shadow-xs" title="Tarik data terbaru dari GitHub (AlvyFahmy/gis)">
+                    <i id="syncGithubIcon" class="fa-solid fa-arrows-rotate"></i>
+                    <span>Sync GitHub</span>
+                </button>
+
+                <!-- Tombol Konfigurasi URL GitHub -->
+                <button id="toggleGithubConfigBtn" class="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-[11px] font-medium px-2 py-1 rounded flex items-center gap-1 transition" title="Pengaturan URL File Excel GitHub">
+                    <i class="fa-brands fa-github text-slate-300"></i>
+                    <span class="hidden xl:inline">URL</span>
+                </button>
+
+                <!-- Upload Lokal Opsional -->
+                <label for="fileInput" class="cursor-pointer bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 text-[11px] font-medium px-2 py-1 rounded flex items-center gap-1 transition" title="Upload File Lokal Opsional (.xlsx/.csv)">
+                    <i class="fa-solid fa-folder-open text-amber-400"></i>
+                    <span class="hidden xl:inline">Lokal</span>
+                    <input type="file" id="fileInput" accept=".xlsx,.xls,.csv" class="hidden">
+                </label>
+
+                <button id="exportExcelBtn" class="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-[11px] font-medium px-2 py-1 rounded flex items-center gap-1 transition" title="Export Attribute Table ke Excel">
+                    <i class="fa-solid fa-file-export text-sky-400"></i>
+                </button>
+
+                <div class="h-4 w-[1px] bg-slate-700 mx-0.5"></div>
+
+                <button id="toggleRightPanelBtn" class="bg-sky-600 hover:bg-sky-500 text-white text-[11px] font-semibold px-2.5 py-1 rounded flex items-center gap-1.5 transition shadow-xs" title="Buka/Tutup Customer Profile Inspector">
+                    <i class="fa-solid fa-id-card-clip"></i>
+                    <span class="hidden sm:inline">Customer Profile</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Baris Konfigurasi URL GitHub (Collapsible) -->
+        <div id="githubConfigBar" class="hidden bg-slate-950/90 border-b border-slate-800 px-3 py-2 text-xs">
+            <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 max-w-5xl">
+                <div class="flex items-center gap-1.5 text-slate-300 font-semibold shrink-0">
+                    <i class="fa-brands fa-github text-emerald-400"></i>
+                    <span>GitHub Excel Source:</span>
+                </div>
+                <input type="text" id="githubUrlInput" value="https://github.com/AlvyFahmy/gis/blob/main/Kordinat.xlsx" 
+                    placeholder="Masukkan URL GitHub (.xlsx / .csv)..." 
+                    class="flex-1 bg-slate-900 border border-slate-700 rounded px-2.5 py-1 text-[11px] font-mono text-emerald-300 focus:outline-none focus:border-emerald-500">
+                <div class="flex items-center gap-1.5 shrink-0">
+                    <button onclick="saveAndSyncGithubUrl()" class="bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-semibold px-3 py-1 rounded transition">
+                        Simpan & Muat Data
+                    </button>
+                    <button onclick="resetGithubUrlDefault()" class="bg-slate-800 hover:bg-slate-700 text-slate-300 text-[11px] px-2.5 py-1 rounded border border-slate-700 transition">
+                        Default Repo
+                    </button>
+                </div>
+            </div>
+            <p class="text-[10px] text-slate-400 mt-1 font-mono">
+                Auto-resolve raw endpoint: <span id="resolvedRawUrlPreview" class="text-slate-300">https://raw.githubusercontent.com/AlvyFahmy/gis/main/Kordinat.xlsx</span>
+            </p>
+        </div>
+
+        <!-- Baris 2: Spatial Bookmarks, Basemap Switcher & Map Layer Toggles -->
+        <div class="min-h-9 px-3 py-1 bg-slate-800/90 flex flex-wrap items-center justify-between gap-2 text-[11px]">
+            <!-- Spatial Bookmarks (Dinamis mengikuti data GitHub) -->
+            <div id="bookmarksBar" class="flex items-center gap-1 overflow-x-auto no-scrollbar">
+                <!-- Dirender dinamis oleh JS -->
+            </div>
+        </aside>
+
+        <!-- KANVAS PETA TENGAH (MAP VIEWPORT + QGIS STATUS BAR) -->
+        <main class="flex-1 flex flex-col relative h-full min-w-0 bg-slate-200">
+            <div id="map" class="flex-1 w-full z-10"></div>
+
+            <!-- Status Bar Bawah ala QGIS / ArcGIS Pro -->
+            <footer class="h-7 bg-slate-900 text-slate-300 border-t border-slate-700 px-3 flex items-center justify-between text-[11px] font-mono shrink-0 z-20 overflow-x-auto no-scrollbar gap-4">
+                <div class="flex items-center gap-3 shrink-0">
+                    <span class="text-emerald-400 flex items-center gap-1.5 font-sans font-semibold text-[10px]">
+                        <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span> READY
+                    </span>
+                    <span class="text-slate-600">|</span>
+                    <div class="flex items-center gap-1.5" title="Koordinat Kursor Real-time (Decimal Degrees)">
+                        <span class="text-slate-400">Coord:</span>
+                        <span id="statusCoordDec" class="text-white font-semibold">-6.200000, 106.800000</span>
+                    </div>
+                    <span class="hidden xl:inline text-slate-600">|</span>
+                    <div class="hidden xl:flex items-center gap-1.5" title="Degrees Minutes Seconds">
+                        <span class="text-slate-400">DMS:</span>
+                        <span id="statusCoordDms" class="text-slate-200">6°12'00"S 106°48'00"E</span>
+                    </div>
+                </div>
+
+                <div class="flex items-center gap-3 shrink-0">
+                    <div>
+                        <span class="text-slate-400">Scale:</span>
+                        <span id="statusScale" class="text-amber-300 font-semibold">1:2,500,000</span>
+                    </div>
+                    <span class="text-slate-600">|</span>
+                    <div>
+                        <span class="text-slate-400">Zoom:</span>
+                        <span id="statusZoom" class="text-sky-300 font-semibold">6</span>
+                    </div>
+                    <span class="text-slate-600">|</span>
+                    <div class="bg-slate-800 px-2 py-0.5 rounded border border-slate-700 text-slate-200 font-semibold">
+                        EPSG:4326 (WGS 84)
+                    </div>
+                    <span class="hidden sm:inline text-slate-600">|</span>
+                    <div id="footerSyncInfo" class="hidden sm:block text-emerald-400 font-semibold">
+                        Source: GitHub Live
+                    </div>
+                </div>
+            </footer>
+        </main>
+
+        <!-- ===================================================================== -->
+        <!-- 4. PANEL KANAN: CUSTOMER PROFILE & FEATURE INSPECTOR (ARCGIS IDENTIFY) -->
+        <!-- ===================================================================== -->
+        <aside id="rightPanel" class="w-full sm:w-[370px] bg-white border-l border-slate-300 flex flex-col h-full z-30 transition-all duration-200 shrink-0 absolute sm:relative inset-y-0 right-0 shadow-2xl sm:shadow-none">
+            <!-- Header Panel Kanan -->
+            <div class="h-8 bg-slate-800 text-white px-3 flex items-center justify-between shrink-0">
+                <div class="flex items-center gap-2">
+                    <i class="fa-solid fa-crosshairs text-sky-400 text-xs"></i>
+                    <span class="text-[11px] font-bold uppercase tracking-wider">Customer Profile — Identify</span>
+                </div>
+                <button id="closeRightPanelBtn" class="text-slate-400 hover:text-white p-1 rounded transition" title="Tutup Panel Customer Profile">
+                    <i class="fa-solid fa-xmark text-sm"></i>
+                </button>
+            </div>
+
+            <!-- Konten Panel Kanan: Empty State (Jika belum ada titik dipilih) -->
+            <div id="inspectorEmptyState" class="hidden flex-1 flex flex-col items-center justify-center p-6 text-center bg-slate-50">
+                <div class="w-14 h-14 rounded-2xl bg-slate-200/80 text-slate-400 flex items-center justify-center mb-3">
+                    <i class="fa-solid fa-location-crosshairs text-2xl"></i>
+                </div>
+                <h3 class="text-sm font-bold text-slate-700">Belum Ada Titik Dipilih</h3>
+                <p class="text-xs text-slate-500 mt-1 leading-relaxed">
+                    Klik salah satu titik marker di peta atau pilih baris pelanggan dari daftar di panel kiri untuk melakukan zoom dan melihat profil lengkapnya di sini.
+                </p>
+            </div>
+
+            <!-- Konten Panel Kanan: Detail Profil Pelanggan Aktif -->
+            <div id="inspectorContent" class="flex-1 overflow-y-auto flex flex-col">
+                <!-- Banner Identitas CustomerID -->
+                <div id="profileBanner" class="p-4 text-white bg-blue-600 shrink-0">
+                    <div class="flex items-center justify-between mb-2">
+                        <span id="profRegionBadge" class="bg-black/25 backdrop-blur-xs text-white text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded">
+                            BANTEN
+                        </span>
+                        <span id="profFeatureNum" class="font-mono text-xs font-bold bg-white/20 px-2 py-0.5 rounded">
+                            Feature #1 of 7
+                        </span>
+                    </div>
+                    <p class="text-[10px] uppercase tracking-wider text-white/80 font-semibold">Customer ID</p>
+                    <div class="flex items-center justify-between gap-2 mt-0.5">
+                        <h2 id="profCustomerId" class="text-2xl font-mono font-bold tracking-tight selectable-text">50210734</h2>
+                        <button id="btnCopyCustId" class="bg-white/20 hover:bg-white/30 text-white text-xs font-medium px-2.5 py-1.5 rounded-lg flex items-center gap-1.5 transition" title="Salin Customer ID">
+                            <i class="fa-regular fa-copy"></i>
+                            <span>Copy ID</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Form Atribut & Analisis Spasial -->
+                <div class="p-3.5 space-y-3.5 text-xs flex-1 bg-slate-50/70">
+                    
+                    <!-- Grup 1: Informasi Infrastruktur / Project -->
+                    <div class="bg-white border border-slate-200 rounded-xl p-3 shadow-2xs">
+                        <div class="flex items-center justify-between border-b border-slate-100 pb-2 mb-2.5">
+                            <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                                <i class="fa-solid fa-diagram-project text-sky-600"></i> Informasi Project
+                            </span>
+                            <span id="profProjectId" class="font-mono text-[11px] font-bold text-sky-700 bg-sky-50 border border-sky-200 px-2 py-0.5 rounded">
+                                P2001282
+                            </span>
+                        </div>
+                        <p class="text-[10px] text-slate-400 font-medium mb-0.5">Nama Project</p>
+                        <p id="profProjectName" class="text-xs font-bold text-slate-800 leading-snug selectable-text">
+                            -
+                        </p>
+                    </div>
+
+                    <!-- Grup 2: Informasi Geografis & Administratif -->
+                    <div class="bg-white border border-slate-200 rounded-xl p-3 shadow-2xs space-y-2.5">
+                        <div class="border-b border-slate-100 pb-1.5">
+                            <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                                <i class="fa-solid fa-earth-asia text-emerald-600"></i> Lokasi Geografis & Administratif
+                            </span>
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-2.5">
+                            <div class="bg-slate-50 p-2 rounded-lg border border-slate-100">
+                                <span class="text-[10px] text-slate-400 block">Region / Provinsi</span>
+                                <span id="profRegionText" class="font-bold text-slate-800">-</span>
+                            </div>
+                            <div class="bg-slate-50 p-2 rounded-lg border border-slate-100">
+                                <span class="text-[10px] text-slate-400 block">Kota / Kabupaten</span>
+                                <span id="profCityText" class="font-bold text-slate-800">-</span>
+                            </div>
+                        </div>
+
+                        <div class="bg-slate-50 p-2 rounded-lg border border-slate-100">
+                            <span class="text-[10px] text-slate-400 block">Kecamatan (Subdistrict)</span>
+                            <span id="profSubdistrictText" class="font-bold text-slate-800">-</span>
+                        </div>
+
+                        <!-- Koordinat Presisi (Desimal & DMS) -->
+                        <div class="bg-slate-900 text-slate-100 rounded-xl p-2.5 space-y-1.5">
+                            <div class="flex items-center justify-between">
+                                <span class="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">Koordinat (WGS 84)</span>
+                                <button id="btnCopyCoords" class="bg-slate-800 hover:bg-slate-700 text-sky-300 border border-slate-700 px-2 py-0.5 rounded text-[10px] font-semibold flex items-center gap-1 transition">
+                                    <i class="fa-regular fa-copy"></i> Salin Koordinat
+                                </button>
+                            </div>
+                            <div class="grid grid-cols-2 gap-2 font-mono text-[11px] pt-1 border-t border-slate-800">
+                                <div>
+                                    <span class="text-[9px] text-slate-400 block">LATITUDE</span>
+                                    <span id="profLatDec" class="text-emerald-400 font-bold selectable-text">-</span>
+                                </div>
+                                <div>
+                                    <span class="text-[9px] text-slate-400 block">LONGITUDE</span>
+                                    <span id="profLngDec" class="text-sky-400 font-bold selectable-text">-</span>
+                                </div>
+                            </div>
+                            <div class="text-[10px] font-mono text-slate-300 pt-1 border-t border-slate-800/80 flex items-center justify-between">
+                                <span class="text-slate-400">DMS:</span>
+                                <span id="profCoordsDms" class="selectable-text">-</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Grup 3: Analisis Spasial Terdekat (Nearest Neighbor) -->
+                    <div class="bg-white border border-slate-200 rounded-xl p-3 shadow-2xs">
+                        <div class="flex items-center justify-between border-b border-slate-100 pb-1.5 mb-2">
+                            <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                                <i class="fa-solid fa-ruler-combined text-amber-600"></i> Nearest Neighbor Analysis
+                            </span>
+                            <span id="nnDistanceBadge" class="font-mono text-[11px] font-bold bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5 rounded">
+                                - km
+                            </span>
+                        </div>
+                        <div id="nnContent" class="space-y-2">
+                            <p class="text-[11px] text-slate-600">
+                                Titik terdekat: <strong id="nnCustomerId" class="font-mono text-slate-900">-</strong> (<span id="nnCity">-</span>)
+                            </p>
+                            <p id="nnProjectName" class="text-[11px] text-slate-500 truncate">-</p>
+                            <button id="btnZoomNearest" class="w-full bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 font-semibold py-1.5 px-2.5 rounded-lg text-[11px] flex items-center justify-center gap-1.5 transition">
+                                <i class="fa-solid fa-route"></i>
+                                <span>Zoom ke Tetangga Terdekat</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Grup 4: Tombol Aksi Cepat -->
+                    <div class="space-y-2 pt-1">
+                        <button id="btnZoomMax" class="w-full bg-slate-800 hover:bg-slate-900 text-white font-semibold py-2 px-3 rounded-xl flex items-center justify-center gap-2 transition shadow-xs">
+                            <i class="fa-solid fa-magnifying-glass-plus text-sky-400"></i>
+                            <span>Zoom Maksimal (Level 18)</span>
+                        </button>
+                        <div class="grid grid-cols-2 gap-2">
+                            <a id="btnOpenGmaps" href="#" target="_blank" rel="noopener noreferrer" class="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-2.5 rounded-xl flex items-center justify-center gap-1.5 transition text-[11px]">
+                                <i class="fa-solid fa-map-location-dot"></i>
+                                <span>Google Maps</span>
+                            </a>
+                            <a id="btnOpenStreetView" href="#" target="_blank" rel="noopener noreferrer" class="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-2 px-2.5 rounded-xl flex items-center justify-center gap-1.5 transition text-[11px]">
+                                <i class="fa-solid fa-street-view"></i>
+                                <span>Street View</span>
+                            </a>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </aside>
+
+    </div>
+
+    <script>
+        // =========================================================================
+        // 1. PRE-LOAD 7 DATA AWAL PERSIS DARI KORDINAT.XLSX
+        // =========================================================================
+        const DEFAULT_DATA = [
+            {
+                CustomerID: "1439975",
+                Region: "Jakarta",
+                Cityname: "Jakarta Barat",
+                Subdistrictname: "KALIDERES",
+                Projectid: "P2504535",
+                Projectname: "FBECRD KBN CITRA GARDEN 5 RW10 KALIDERES TK",
+                Latitude: -6.1182972,
+                Longitude: 106.704661
+            },
+            {
+                CustomerID: "35256934",
+                Region: "Jawa Barat",
+                Cityname: "Cirebon",
+                Subdistrictname: "MUNDU",
+                Projectid: "P2201434",
+                Projectname: "FBECRD KAB CIREBON LOBUNTA RW 07",
+                Latitude: -6.757366,
+                Longitude: 108.571677
+            },
+            {
+                CustomerID: "41014131",
+                Region: "Kalimantan Selatan",
+                Cityname: "Banjarbaru",
+                Subdistrictname: "LANDASAN ULIN",
+                Projectid: "P2100517",
+                Projectname: "Griya Ulin Permai RW 03",
+                Latitude: -3.4537541,
+                Longitude: 114.7430112
+            },
+            {
+                CustomerID: "45349429",
+                Region: "Bali",
+                Cityname: "Badung",
+                Subdistrictname: "KUTA SELATAN",
+                Projectid: "P2101648",
+                Projectname: "FBEOPA Badung Kelurahan Tanjung Benoa- parsial 1- M121, M122, M123, M124, M125",
+                Latitude: -8.7692817,
+                Longitude: 115.2214883
+            },
+            {
+                CustomerID: "50210734",
+                Region: "Banten",
+                Cityname: "Tangerang",
+                Subdistrictname: "LARANGAN",
+                Projectid: "P2001282",
+                Projectname: "KOMP. DEPLU CARAKA BUANA RW07 CIPADU JAYA",
+                Latitude: -6.2501688,
+                Longitude: 106.7411464
+            },
+            {
+                CustomerID: "50210933",
+                Region: "Banten",
+                Cityname: "Tangerang",
+                Subdistrictname: "PINANG",
+                Projectid: "ADD2112890",
+                Projectname: "Additional Homeid",
+                Latitude: -6.226014,
+                Longitude: 106.691043
+            },
+            {
+                CustomerID: "50210938",
+                Region: "Banten",
+                Cityname: "Tangerang",
+                Subdistrictname: "KELAPA DUA",
+                Projectid: "P1800435",
+                Projectname: "Palem Semi Karawaci RW.019",
+                Latitude: -6.2154956,
+                Longitude: 106.6081978
+            }
+        ];
+
+        const REGION_COLORS = {
+            "Jakarta": "#e11d48",            // Rose Red
+            "Banten": "#2563eb",             // Royal Blue
+            "Jawa Barat": "#059669",         // Emerald Green
+            "Kalimantan Selatan": "#d97706", // Amber
+            "Bali": "#7c3aed"                // Violet
+        };
+        const FALLBACK_PALETTE = ["#0891b2", "#db2777", "#4f46e5", "#65a30d", "#ea580c", "#0d9488"];
+
+        function getRegionColor(regionName) {
+            if (!regionName) return "#475569";
+            if (REGION_COLORS[regionName]) return REGION_COLORS[regionName];
+            let hash = 0;
+            for (let i = 0; i < regionName.length; i++) {
+                hash = regionName.charCodeAt(i) + ((hash << 5) - hash);
+            }
+            const color = FALLBACK_PALETTE[Math.abs(hash) % FALLBACK_PALETTE.length];
+            REGION_COLORS[regionName] = color;
+            return color;
+        }
+
+        // State Aplikasi
+        const DEFAULT_GITHUB_BLOB_URL = "https://github.com/AlvyFahmy/gis/blob/main/Kordinat.xlsx";
+        let currentGithubUrl = localStorage.getItem('gis_github_source_url') || DEFAULT_GITHUB_BLOB_URL;
+        let lastSyncedTimeStr = "-";
+        let dataSourceMode = "github"; // 'github' | 'local' | 'fallback'
+
+        let allData = [...DEFAULT_DATA];
+        let filteredData = [...DEFAULT_DATA];
+        let activeRegions = new Set();
+        let searchQuery = "";
+        let selectedCustomerId = null;
+        let overlayState = {
+            labels: true,
+            spider: false,
+            grid: false
+        };
+        let markersMap = {};
+// ... existing code ... -->
+        function initFilters() {
+            const regions = [...new Set(allData.map(d => d.Region))];
+            activeRegions = new Set(regions);
+            renderRegionLayersTree();
+            renderDynamicBookmarks();
+        }
+
+        function renderDynamicBookmarks() {
+            const bar = document.getElementById('bookmarksBar');
+            if (!bar) return;
+
+            const jaboCount = allData.filter(d =>
+                d.Latitude >= -6.6 && d.Latitude <= -5.9 &&
+                d.Longitude >= 106.4 && d.Longitude <= 107.1
+            ).length;
+
+            const uniqueCities = [...new Set(allData.map(d => d.Cityname).filter(c => c && c !== '-'))];
+            const nonJaboCities = uniqueCities.filter(c => !['Jakarta Barat', 'Jakarta Pusat', 'Jakarta Selatan', 'Jakarta Timur', 'Jakarta Utara', 'Tangerang', 'Tangerang Selatan', 'Bekasi', 'Depok', 'Bogor'].includes(c));
+
+            let html = `
+                <span class="text-slate-400 font-semibold uppercase tracking-wider text-[10px] mr-1 flex items-center gap-1 shrink-0">
+                    <i class="fa-solid fa-bookmark text-sky-400"></i> Bookmarks:
+                </span>
+                <button onclick="fitAllPoints()" class="bg-slate-700/80 hover:bg-sky-600 text-slate-100 px-2 py-0.5 rounded font-medium transition shrink-0 flex items-center gap-1">
+                    <i class="fa-solid fa-globe text-[10px]"></i> Full Extent (${allData.length})
+                </button>
+            `;
+
+            if (jaboCount > 0) {
+                html += `
+                    <button onclick="zoomJabodetabek()" class="bg-slate-700/80 hover:bg-sky-600 text-slate-100 px-2 py-0.5 rounded font-medium transition shrink-0">
+                        Jabodetabek (${jaboCount})
+                    </button>
+                `;
+            }
+
+            nonJaboCities.slice(0, 6).forEach(city => {
+                html += `
+                    <button onclick="zoomToCity('${city.replace(/'/g, "\\'")}')" class="bg-slate-700/80 hover:bg-sky-600 text-slate-100 px-2 py-0.5 rounded font-medium transition shrink-0">
+                        ${city}
+                    </button>
+                `;
+            });
+
+            bar.innerHTML = html;
+        }
+// ... existing code ... -->
+            if (nearestItem) {
+                const distDisplay = minDist < 1 ? `${Math.round(minDist * 1000)} m` : `${minDist.toFixed(2)} km`;
+                document.getElementById('nnDistanceBadge').textContent = distDisplay;
+                document.getElementById('nnCustomerId').textContent = nearestItem.CustomerID;
+                document.getElementById('nnCity').textContent = `${nearestItem.Cityname}, ${nearestItem.Region}`;
+                document.getElementById('nnProjectName').textContent = nearestItem.Projectname;
+                document.getElementById('btnZoomNearest').disabled = false;
+                document.getElementById('btnZoomNearest').onclick = () => identifyCustomer(nearestItem.CustomerID, true);
+            } else {
+                document.getElementById('nnDistanceBadge').textContent = 'N/A';
+// ... existing code ... -->
+        // =========================================================================
+        // 8. DIRECT GITHUB LIVE SYNC & EXCEL PARSER (SHEETJS)
+        // =========================================================================
+        function resolveGithubRawUrl(url) {
+            let cleanUrl = (url || "").trim();
+            // Konversi otomatis format https://github.com/user/repo/blob/branch/path -> https://raw.githubusercontent.com/user/repo/branch/path
+            const githubBlobRegex = /^https?:\/\/github\.com\/([^\/]+)\/([^\/]+)\/blob\/(.+)$/i;
+            const match = cleanUrl.match(githubBlobRegex);
+            if (match) {
+                return `https://raw.githubusercontent.com/${match[1]}/${match[2]}/${match[3]}`;
+            }
+            return cleanUrl;
+        }
+
+        function parseWorkbookBuffer(arrayBuffer) {
+            const data = new Uint8Array(arrayBuffer);
+            const workbook = XLSX.read(data, { type: 'array' });
+            const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+            const rows = XLSX.utils.sheet_to_json(worksheet, { defval: "" });
+
+            return rows.map((row, i) => {
+                const getCol = (names) => {
+                    const key = Object.keys(row).find(k =>
+                        names.includes(k.toLowerCase().replace(/[\s_]/g, ''))
+                    );
+                    return key ? row[key] : "";
+                };
+                const lat = parseFloat(String(getCol(['latitude', 'lat', 'lintang'])).replace(',', '.'));
+                const lng = parseFloat(String(getCol(['longitude', 'long', 'lng', 'bujur'])).replace(',', '.'));
+
+                return {
+                    CustomerID: String(getCol(['customerid', 'custid', 'id']) || `CUST-${i + 1}`),
+                    Region: String(getCol(['region', 'provinsi', 'wilayah']) || 'Lainnya'),
+                    Cityname: String(getCol(['cityname', 'city', 'kota', 'kabupaten']) || '-'),
+                    Subdistrictname: String(getCol(['subdistrictname', 'subdistrict', 'kecamatan']) || '-'),
+                    Projectid: String(getCol(['projectid', 'projid']) || '-'),
+                    Projectname: String(getCol(['projectname', 'project', 'namaproject']) || 'Project Pelanggan'),
+                    Latitude: lat,
+                    Longitude: lng
+                };
+            }).filter(d => !isNaN(d.Latitude) && !isNaN(d.Longitude));
+        }
+
+        function updateSourceIndicators(mode, detailText) {
+            dataSourceMode = mode;
+            const dot = document.getElementById('sourceStatusDot');
+            const text = document.getElementById('sourceStatusText');
+            const footerInfo = document.getElementById('footerSyncInfo');
+
+            if (mode === 'github') {
+                dot.className = 'w-2 h-2 rounded-full bg-emerald-400';
+                text.textContent = `GitHub Live (${detailText})`;
+                footerInfo.className = 'hidden sm:block text-emerald-400 font-semibold';
+                footerInfo.textContent = `Source: GitHub Live • ${detailText}`;
+            } else if (mode === 'local') {
+                dot.className = 'w-2 h-2 rounded-full bg-sky-400';
+                text.textContent = `File Lokal (${detailText})`;
+                footerInfo.className = 'hidden sm:block text-sky-400 font-semibold';
+                footerInfo.textContent = `Source: Local Upload • ${detailText}`;
+            } else {
+                dot.className = 'w-2 h-2 rounded-full bg-amber-400';
+                text.textContent = `Offline Fallback (${detailText})`;
+                footerInfo.className = 'hidden sm:block text-amber-400 font-semibold';
+                footerInfo.textContent = `Source: Embedded Fallback (${detailText})`;
+            }
+        }
+
+        window.fetchFromGitHub = async function(isInitialLoad = false) {
+            const rawBaseUrl = resolveGithubRawUrl(currentGithubUrl);
+            document.getElementById('resolvedRawUrlPreview').textContent = rawBaseUrl;
+
+            const syncIcon = document.getElementById('syncGithubIcon');
+            const syncBtn = document.getElementById('syncGithubBtn');
+            syncIcon.classList.add('fa-spin');
+            syncBtn.disabled = true;
+
+            try {
+                // Tambahkan cache-buster agar setiap perubahan commit di GitHub langsung terbaca
+                const cacheBuster = (rawBaseUrl.includes('?') ? '&' : '?') + 't=' + Date.now();
+                const response = await fetch(rawBaseUrl + cacheBuster, { cache: 'no-store' });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status} (${response.statusText})`);
+                }
+
+                const arrayBuffer = await response.arrayBuffer();
+                const parsed = parseWorkbookBuffer(arrayBuffer);
+
+                if (parsed.length === 0) {
+                    throw new Error('Tidak ditemukan baris Latitude/Longitude yang valid di file Excel.');
+                }
+
+                allData = parsed;
+                const now = new Date();
+                lastSyncedTimeStr = now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+                initFilters();
+                applyFilters();
+
+                // Jika sebelumnya ada titik dipilih dan masih ada di dataset baru, perbarui profilnya
+                if (selectedCustomerId && allData.some(d => String(d.CustomerID) === String(selectedCustomerId))) {
+                    identifyCustomer(selectedCustomerId, false);
+                } else {
+                    selectedCustomerId = null;
+                    document.getElementById('inspectorContent').classList.add('hidden');
+                    document.getElementById('inspectorEmptyState').classList.remove('hidden');
+                    if (isInitialLoad) {
+                        fitAllPoints();
+                    }
+                }
+
+                updateSourceIndicators('github', `${parsed.length} titik • ${lastSyncedTimeStr}`);
+                if (!isInitialLoad) {
+                    showToast(`Sinkronisasi GitHub berhasil! (${parsed.length} titik dimuat)`, 'success');
+                }
+            } catch (err) {
+                console.warn('GitHub Fetch Error, menggunakan data fallback:', err);
+                if (isInitialLoad) {
+                    allData = [...DEFAULT_DATA];
+                    initFilters();
+                    applyFilters();
+                    fitAllPoints();
+                }
+                updateSourceIndicators('fallback', `${allData.length} titik`);
+                showToast(`Gagal menarik dari GitHub (${err.message}). Menampilkan data cadangan.`, 'error');
+            } finally {
+                syncIcon.classList.remove('fa-spin');
+                syncBtn.disabled = false;
+            }
+        };
+
+        window.saveAndSyncGithubUrl = function() {
+            const inputVal = document.getElementById('githubUrlInput').value.trim();
+            if (!inputVal) {
+                showToast('URL GitHub tidak boleh kosong!', 'error');
+                return;
+            }
+            currentGithubUrl = inputVal;
+            localStorage.setItem('gis_github_source_url', currentGithubUrl);
+            fetchFromGitHub(false);
+        };
+
+        window.resetGithubUrlDefault = function() {
+            currentGithubUrl = DEFAULT_GITHUB_BLOB_URL;
+            document.getElementById('githubUrlInput').value = DEFAULT_GITHUB_BLOB_URL;
+            localStorage.setItem('gis_github_source_url', DEFAULT_GITHUB_BLOB_URL);
+            fetchFromGitHub(false);
+        };
+
+        document.getElementById('githubUrlInput').addEventListener('input', (e) => {
+            document.getElementById('resolvedRawUrlPreview').textContent = resolveGithubRawUrl(e.target.value);
+        });
+
+        document.getElementById('toggleGithubConfigBtn').addEventListener('click', () => {
+            document.getElementById('githubConfigBar').classList.toggle('hidden');
+            setTimeout(() => map.invalidateSize(), 150);
+        });
+
+        // Upload File Lokal (Opsional)
+        document.getElementById('fileInput').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(evt) {
+                try {
+                    const parsed = parseWorkbookBuffer(evt.target.result);
+                    if (parsed.length === 0) {
+                        showToast('Kolom Latitude / Longitude tidak valid pada file!', 'error');
+                        return;
+                    }
+
+                    allData = parsed;
+                    selectedCustomerId = null;
+                    document.getElementById('inspectorContent').classList.add('hidden');
+                    document.getElementById('inspectorEmptyState').classList.remove('hidden');
+
+                    initFilters();
+                    applyFilters();
+                    fitAllPoints();
+                    updateSourceIndicators('local', `${file.name} • ${parsed.length} titik`);
+                    showToast(`Berhasil memuat ${parsed.length} titik dari file lokal!`, 'success');
+                } catch (err) {
+                    console.error(err);
+                    showToast('Gagal membaca file Excel/CSV.', 'error');
+                }
+            };
+            reader.readAsArrayBuffer(file);
+        });
+
+        document.getElementById('exportExcelBtn').addEventListener('click', () => {
+            const ws = XLSX.utils.json_to_sheet(filteredData);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "Customer_Spatial_Data");
+            XLSX.writeFile(wb, "GIS_Customer_Coordinates.xlsx");
+            showToast('Attribute Table berhasil diekspor ke Excel!', 'success');
+        });
+
+        // =========================================================================
+        // 9. EVENT LISTENERS PANEL & SEARCH
+        // =========================================================================
+        document.getElementById('searchInput').addEventListener('input', (e) => {
+// ... existing code ... -->
+        // =========================================================================
+        // 10. INISIALISASI WORKSPACE SAAT DIMUAT (AUTO-FETCH GITHUB)
+        // =========================================================================
+        window.addEventListener('DOMContentLoaded', () => {
+            document.getElementById('githubUrlInput').value = currentGithubUrl;
+            document.getElementById('resolvedRawUrlPreview').textContent = resolveGithubRawUrl(currentGithubUrl);
+
+            // Awalnya tampilkan Empty State pada Customer Profile di sebelah kanan sampai titik diklik
+            document.getElementById('inspectorContent').classList.add('hidden');
+            document.getElementById('inspectorEmptyState').classList.remove('hidden');
+
+            map.invalidateSize();
+            updateMapStatusBar(null);
+
+            // Langsung tarik file Kordinat.xlsx dari GitHub AlvyFahmy/gis
+            setTimeout(() => {
+                map.invalidateSize();
+                fetchFromGitHub(true);
+            }, 200);
+        });
+
+        window.addEventListener('resize', () => {
+            map.invalidateSize();
+        });
+    </script>
+</body>
+</html>

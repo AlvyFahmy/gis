@@ -163,4 +163,533 @@
     <!-- Collapsible Body -->
     <div id="summary-body" class="p-4 space-y-3.5">
       <!-- KPI Strip -->
-      <div class="grid grid-cols-2 gap-2.
+      <div class="grid grid-cols-2 gap-2.5">
+        <div class="bg-slate-50 border border-slate-200/80 rounded-xl p-2.5">
+          <div class="text-[11px] font-medium text-slate-500">Total Koordinat</div>
+          <div id="kpi-total" class="text-xl font-extrabold text-slate-900 mt-0.5">0</div>
+        </div>
+        <div class="bg-blue-50/70 border border-blue-200/80 rounded-xl p-2.5">
+          <div class="text-[11px] font-medium text-blue-700">Populasi Terbanyak</div>
+          <div id="kpi-top-city" class="text-sm font-extrabold text-blue-900 mt-1 truncate">-</div>
+          <div id="kpi-top-pct" class="text-[10px] font-semibold text-blue-600">-</div>
+        </div>
+      </div>
+
+      <!-- Search Box -->
+      <div class="relative">
+        <i class="fa-solid fa-magnifying-glass text-slate-400 text-xs absolute left-3 top-1/2 -translate-y-1/2"></i>
+        <input type="text" id="search-input" oninput="applyFilter()" placeholder="Cari Customer ID, Kota, Project..."
+          class="w-full pl-8 pr-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition" />
+      </div>
+
+      <!-- Population Breakdown by City -->
+      <div>
+        <div class="flex items-center justify-between text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2">
+          <span>Konsentrasi Wilayah (Klik Zoom)</span>
+          <button onclick="clearCityFilter()" id="btn-clear-filter" class="hidden text-blue-600 hover:underline normal-case font-semibold">Reset</button>
+        </div>
+        <div id="city-ranking-list" class="space-y-2 max-h-52 overflow-y-auto pr-1">
+          <!-- Populated dynamically -->
+        </div>
+      </div>
+
+      <!-- Legend -->
+      <div class="pt-2 border-t border-slate-100 flex items-center justify-between text-[10px] text-slate-500">
+        <span class="font-semibold">Skala Cluster:</span>
+        <div class="flex items-center gap-2">
+          <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block"></span>1–2</span>
+          <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-amber-500 inline-block"></span>3–5</span>
+          <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-red-500 inline-block"></span>6+</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Right Slide-Over Drawer: Customer Profile (Hidden by default, opens ONLY when a point is clicked) -->
+  <div id="profile-drawer" class="fixed top-4 right-4 bottom-4 z-[1100] w-96 max-w-[calc(100vw-2rem)] bg-white shadow-2xl border border-slate-200 rounded-2xl flex flex-col transform translate-x-[120%] transition-transform duration-300 ease-out">
+    <!-- Drawer Header -->
+    <div class="px-5 py-4 bg-slate-900 text-white rounded-t-2xl flex items-center justify-between">
+      <div>
+        <span id="prof-region-badge" class="inline-block px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider rounded bg-blue-500/20 text-blue-300 border border-blue-400/30 mb-1">
+          REGION
+        </span>
+        <h2 class="text-base font-extrabold tracking-tight flex items-center gap-2">
+          <i class="fa-solid fa-user-check text-blue-400"></i>
+          <span>Customer Profile</span>
+        </h2>
+      </div>
+      <button onclick="closeProfileDrawer()" class="w-8 h-8 rounded-xl bg-white/10 hover:bg-white/20 flex items-center justify-center text-slate-200 transition" title="Tutup Profil">
+        <i class="fa-solid fa-xmark"></i>
+      </button>
+    </div>
+
+    <!-- Drawer Content -->
+    <div class="p-5 overflow-y-auto flex-1 space-y-4">
+      <!-- Primary ID Card -->
+      <div class="bg-gradient-to-br from-blue-50 to-indigo-50/70 border border-blue-200/80 rounded-xl p-4">
+        <div class="text-[11px] font-semibold text-blue-600 uppercase tracking-wider">Customer ID</div>
+        <div class="flex items-center justify-between mt-0.5">
+          <span id="prof-custid" class="text-2xl font-black text-slate-900 tracking-tight">-</span>
+          <button onclick="copyText('prof-custid')" class="text-xs bg-white hover:bg-blue-600 hover:text-white text-blue-600 border border-blue-200 px-2.5 py-1 rounded-lg font-semibold transition">
+            <i class="fa-regular fa-copy mr-1"></i>Salin
+          </button>
+        </div>
+        <div class="mt-2 pt-2 border-t border-blue-200/60 flex items-center justify-between text-xs">
+          <span class="text-slate-500">Project ID:</span>
+          <span id="prof-projid" class="font-mono font-bold text-slate-800">-</span>
+        </div>
+      </div>
+
+      <!-- Project Name -->
+      <div class="bg-slate-50 border border-slate-200/80 rounded-xl p-3.5">
+        <div class="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Nama Project / Cluster</div>
+        <p id="prof-projname" class="text-sm font-bold text-slate-800 leading-snug">-</p>
+      </div>
+
+      <!-- Administrative Location -->
+      <div class="bg-slate-50 border border-slate-200/80 rounded-xl p-3.5 space-y-2.5">
+        <div class="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Lokasi Administratif</div>
+        <div class="grid grid-cols-2 gap-3 text-xs">
+          <div>
+            <span class="text-slate-400 block">Region / Provinsi</span>
+            <span id="prof-region" class="font-bold text-slate-800">-</span>
+          </div>
+          <div>
+            <span class="text-slate-400 block">Kota / Kabupaten</span>
+            <span id="prof-city" class="font-bold text-slate-800">-</span>
+          </div>
+          <div class="col-span-2">
+            <span class="text-slate-400 block">Kecamatan (Subdistrict)</span>
+            <span id="prof-subdistrict" class="font-bold text-slate-800">-</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Coordinates Box -->
+      <div class="bg-slate-50 border border-slate-200/80 rounded-xl p-3.5">
+        <div class="flex items-center justify-between mb-1.5">
+          <span class="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Titik Koordinat GPS</span>
+          <button onclick="copyCoordinates()" class="text-[11px] text-blue-600 hover:underline font-semibold">
+            <i class="fa-regular fa-copy mr-1"></i>Salin Lat, Long
+          </button>
+        </div>
+        <div class="grid grid-cols-2 gap-2 font-mono text-xs bg-white p-2.5 rounded-lg border border-slate-200">
+          <div>
+            <span class="text-[10px] text-slate-400 block">LATITUDE</span>
+            <span id="prof-lat" class="font-bold text-slate-900">-</span>
+          </div>
+          <div>
+            <span class="text-[10px] text-slate-400 block">LONGITUDE</span>
+            <span id="prof-lng" class="font-bold text-slate-900">-</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Population Context in Same City -->
+      <div class="bg-emerald-50/70 border border-emerald-200/80 rounded-xl p-3.5 flex items-center gap-3">
+        <div class="w-9 h-9 rounded-lg bg-emerald-500 text-white flex items-center justify-center shrink-0">
+          <i class="fa-solid fa-users-viewfinder"></i>
+        </div>
+        <div class="text-xs">
+          <div class="font-bold text-emerald-900">Kepadatan Wilayah Ini</div>
+          <p id="prof-density-note" class="text-emerald-700 mt-0.5">-</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Drawer Footer Actions -->
+    <div class="p-4 border-t border-slate-200 bg-slate-50 rounded-b-2xl grid grid-cols-2 gap-2.5">
+      <a id="btn-gmaps" href="#" target="_blank" rel="noopener noreferrer"
+        class="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold py-2.5 px-3 rounded-xl flex items-center justify-center gap-1.5 shadow-sm transition">
+        <i class="fa-solid fa-diamond-turn-right"></i>
+        <span>Buka Google Maps</span>
+      </a>
+      <a id="btn-streetview" href="#" target="_blank" rel="noopener noreferrer"
+        class="bg-white hover:bg-slate-100 text-slate-800 border border-slate-300 text-xs font-bold py-2.5 px-3 rounded-xl flex items-center justify-center gap-1.5 transition">
+        <i class="fa-solid fa-street-view text-amber-500"></i>
+        <span>Street View</span>
+      </a>
+    </div>
+  </div>
+
+  <!-- Toast Notification -->
+  <div id="toast" class="fixed bottom-5 left-1/2 -translate-x-1/2 z-[1200] bg-slate-900 text-white text-xs font-semibold px-4 py-2.5 rounded-full shadow-xl opacity-0 pointer-events-none transition-opacity duration-300">
+    Tersalin ke clipboard!
+  </div>
+
+  <script>
+    // URL Raw GitHub File Anda
+    const GITHUB_XLSX_URL = 'https://raw.githubusercontent.com/AlvyFahmy/gis/main/Kordinat.xlsx';
+
+    // Data Cadangan (Fallback otomatis jika offline / rate limit)
+    const FALLBACK_DATA = [
+      { CustomerID: 1439975, Region: 'Jakarta', Cityname: 'Jakarta Barat', Subdistrictname: 'KALIDERES', Projectid: 'P2504535', Projectname: 'FBECRD KBN CITRA GARDEN 5 RW10 KALIDERES TK', Latitude: -6.1182972, Longitude: 106.704661 },
+      { CustomerID: 35256934, Region: 'Jawa Barat', Cityname: 'Cirebon', Subdistrictname: 'MUNDU', Projectid: 'P2201434', Projectname: 'FBECRD KAB CIREBON LOBUNTA RW 07', Latitude: -6.757366, Longitude: 108.571677 },
+      { CustomerID: 41014131, Region: 'Kalimantan Selatan', Cityname: 'Banjarbaru', Subdistrictname: 'LANDASAN ULIN', Projectid: 'P2100517', Projectname: 'Griya Ulin Permai RW 03', Latitude: -3.4537541, Longitude: 114.7430112 },
+      { CustomerID: 45349429, Region: 'Bali', Cityname: 'Badung', Subdistrictname: 'KUTA SELATAN', Projectid: 'P2101648', Projectname: 'FBEOPA Badung Kelurahan Tanjung Benoa- parsial 1- M121, M122, M123, M124, M125', Latitude: -8.7692817, Longitude: 115.2214883 },
+      { CustomerID: 50210734, Region: 'Banten', Cityname: 'Tangerang', Subdistrictname: 'LARANGAN', Projectid: 'P2001282', Projectname: 'KOMP. DEPLU CARAKA BUANA RW07 CIPADU JAYA', Latitude: -6.2501688, Longitude: 106.7411464 },
+      { CustomerID: 50210933, Region: 'Banten', Cityname: 'Tangerang', Subdistrictname: 'PINANG', Projectid: 'ADD2112890', Projectname: 'Additional Homeid', Latitude: -6.226014, Longitude: 106.691043 },
+      { CustomerID: 50210938, Region: 'Banten', Cityname: 'Tangerang', Subdistrictname: 'KELAPA DUA', Projectid: 'P1800435', Projectname: 'Palem Semi Karawaci RW.019', Latitude: -6.2154956, Longitude: 106.6081978 }
+    ];
+
+    const REGION_COLORS = {
+      'Jakarta': '#e11d48',
+      'Banten': '#2563eb',
+      'Jawa Barat': '#059669',
+      'Kalimantan Selatan': '#d97706',
+      'Bali': '#7c3aed'
+    };
+
+    let allCustomers = [];
+    let filteredCustomers = [];
+    let selectedCityFilter = null;
+    let activeCustomer = null;
+    let showDensity = false;
+
+    // 1. Inisialisasi Peta Leaflet (100% Tanpa API Key & Anti Blokir OSM)
+    const map = L.map('map', {
+      zoomControl: false,
+      attributionControl: true
+    }).setView([-5.8, 110.5], 5);
+
+    L.control.zoom({ position: 'bottomright' }).addTo(map);
+
+    // Tile Layers (Semua Gratis Tanpa API Key & Aman untuk GitHub Pages)
+    const basemaps = {
+      voyager: L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+        attribution: '&copy; OpenStreetMap &copy; CARTO',
+        subdomains: 'abcd',
+        maxZoom: 20
+      }),
+      satellite: L.layerGroup([
+        L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+          attribution: 'Tiles &copy; Esri',
+          maxZoom: 19
+        }),
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager_only_labels/{z}/{x}/{y}{r}.png', {
+          subdomains: 'abcd',
+          maxZoom: 19
+        })
+      ]),
+      dark: L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+        attribution: '&copy; OpenStreetMap &copy; CARTO',
+        subdomains: 'abcd',
+        maxZoom: 20
+      })
+    };
+
+    let currentBasemap = basemaps.voyager.addTo(map);
+
+    function setBasemap(key) {
+      if (currentBasemap) map.removeLayer(currentBasemap);
+      currentBasemap = basemaps[key].addTo(map);
+
+      document.querySelectorAll('.basemap-btn').forEach(btn => {
+        btn.classList.remove('bg-blue-600', 'text-white');
+        btn.classList.add('text-slate-600', 'hover:bg-slate-100');
+      });
+      const activeBtn = document.getElementById(`btn-map-${key}`);
+      activeBtn.classList.add('bg-blue-600', 'text-white');
+      activeBtn.classList.remove('text-slate-600', 'hover:bg-slate-100');
+    }
+
+    // Layer Groups
+    const densityLayerGroup = L.layerGroup().addTo(map);
+    const clusterGroup = L.markerClusterGroup({
+      showCoverageOnHover: false,
+      maxClusterRadius: 55,
+      spiderfyOnMaxZoom: true,
+      iconCreateFunction: function (cluster) {
+        const count = cluster.getChildCount();
+        let sizeClass = 'cluster-low';
+        let dim = 42;
+        if (count >= 6) {
+          sizeClass = 'cluster-high';
+          dim = 54;
+        } else if (count >= 3) {
+          sizeClass = 'cluster-med';
+          dim = 48;
+        }
+        return L.divIcon({
+          html: `<div class="custom-cluster ${sizeClass}" style="width:${dim}px;height:${dim}px;font-size:${count >= 10 ? 14 : 15}px;">${count}</div>`,
+          className: '',
+          iconSize: [dim, dim]
+        });
+      }
+    }).addTo(map);
+
+    // 2. Fetch & Parse Excel langsung dari GitHub
+    async function syncFromGitHub() {
+      const badge = document.getElementById('data-source-badge');
+      const syncText = document.getElementById('sync-text');
+      badge.innerHTML = `<i class="fa-solid fa-spinner fa-spin text-blue-400"></i> Mengambil data GitHub...`;
+      syncText.textContent = 'Syncing...';
+
+      try {
+        const response = await fetch(`${GITHUB_XLSX_URL}?t=${Date.now()}`);
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const arrayBuffer = await response.arrayBuffer();
+        const workbook = XLSX.read(arrayBuffer, { type: 'array' });
+        const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+        const rawRows = XLSX.utils.sheet_to_json(firstSheet);
+
+        const cleaned = rawRows
+          .map(r => ({
+            CustomerID: r.CustomerID ?? r['Customer ID'] ?? '-',
+            Region: String(r.Region || 'Lainnya').trim(),
+            Cityname: String(r.Cityname || r.City || 'Lainnya').trim(),
+            Subdistrictname: String(r.Subdistrictname || '').replace(/\.+$/, '').trim(),
+            Projectid: String(r.Projectid || '-').trim(),
+            Projectname: String(r.Projectname || '-').trim(),
+            Latitude: parseFloat(r.Latitude),
+            Longitude: parseFloat(r.Longitude)
+          }))
+          .filter(r => !isNaN(r.Latitude) && !isNaN(r.Longitude));
+
+        if (cleaned.length === 0) throw new Error('Data koordinat kosong');
+
+        allCustomers = cleaned;
+        badge.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block"></span> GitHub Live (${allCustomers.length} titik)`;
+      } catch (err) {
+        console.warn('Menggunakan data cadangan:', err);
+        allCustomers = FALLBACK_DATA;
+        badge.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-amber-400 inline-block"></span> Data Lokal (${allCustomers.length} titik)`;
+      } finally {
+        syncText.textContent = 'Sync GitHub';
+        applyFilter(true);
+      }
+    }
+
+    // 3. Render Markers, Population Ranking & Density Zones
+    function applyFilter(autoFit = false) {
+      const query = document.getElementById('search-input').value.toLowerCase().trim();
+
+      filteredCustomers = allCustomers.filter(item => {
+        const matchCity = !selectedCityFilter || item.Cityname === selectedCityFilter;
+        const matchQuery = !query ||
+          String(item.CustomerID).toLowerCase().includes(query) ||
+          item.Cityname.toLowerCase().includes(query) ||
+          item.Region.toLowerCase().includes(query) ||
+          item.Subdistrictname.toLowerCase().includes(query) ||
+          item.Projectname.toLowerCase().includes(query);
+        return matchCity && matchQuery;
+      });
+
+      renderMarkers(autoFit);
+      renderPopulationSummary();
+      renderDensityZones();
+    }
+
+    function renderMarkers(autoFit) {
+      clusterGroup.clearLayers();
+
+      filteredCustomers.forEach(cust => {
+        const color = REGION_COLORS[cust.Region] || '#2563eb';
+        const icon = L.divIcon({
+          className: '',
+          iconSize: [38, 38],
+          iconAnchor: [19, 19],
+          html: `
+            <div class="single-pin-wrapper" style="width:38px;height:38px;">
+              <div class="single-pin-pulse" style="background:${color};"></div>
+              <div class="single-pin-core" style="background:${color};"></div>
+            </div>
+          `
+        });
+
+        const marker = L.marker([cust.Latitude, cust.Longitude], { icon });
+
+        // Tooltip ringkas saat hover
+        marker.bindTooltip(`
+          <div style="font-family:sans-serif;font-size:11px;line-height:1.3;">
+            <strong>ID: ${cust.CustomerID}</strong><br/>
+            <span style="color:#475569;">${cust.Subdistrictname}, ${cust.Cityname}</span>
+          </div>
+        `, { direction: 'top', offset: [0, -10] });
+
+        // Klik titik -> Zoom dekat & buka Customer Profile di kanan
+        marker.on('click', () => {
+          map.flyTo([cust.Latitude, cust.Longitude], 16, { duration: 1.1 });
+          openProfileDrawer(cust);
+        });
+
+        clusterGroup.addLayer(marker);
+      });
+
+      if (autoFit && filteredCustomers.length > 0) {
+        fitAllMarkers();
+      }
+    }
+
+    function renderPopulationSummary() {
+      const total = allCustomers.length;
+      document.getElementById('kpi-total').textContent = total;
+
+      // Hitung populasi per Cityname
+      const counts = {};
+      allCustomers.forEach(c => {
+        counts[c.Cityname] = (counts[c.Cityname] || 0) + 1;
+      });
+
+      const sortedCities = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+
+      if (sortedCities.length > 0) {
+        const [topCity, topCount] = sortedCities[0];
+        const pct = ((topCount / total) * 100).toFixed(1);
+        document.getElementById('kpi-top-city').textContent = topCity;
+        document.getElementById('kpi-top-pct').textContent = `${topCount} dari ${total} titik (${pct}%)`;
+      }
+
+      const listEl = document.getElementById('city-ranking-list');
+      listEl.innerHTML = sortedCities.map(([city, count]) => {
+        const pct = ((count / total) * 100).toFixed(0);
+        const isSelected = selectedCityFilter === city;
+        const sample = allCustomers.find(x => x.Cityname === city);
+        const barColor = REGION_COLORS[sample?.Region] || '#2563eb';
+
+        return `
+          <button onclick="toggleCityFilter('${city.replace(/'/g, "\\'")}')"
+            class="w-full text-left p-2 rounded-xl border transition ${isSelected ? 'bg-blue-50 border-blue-400 shadow-sm' : 'bg-slate-50/80 hover:bg-slate-100 border-slate-200/70'}">
+            <div class="flex items-center justify-between text-xs mb-1">
+              <span class="font-bold text-slate-800 truncate">${city}</span>
+              <span class="font-extrabold text-slate-900">${count} <span class="text-[10px] font-normal text-slate-500">(${pct}%)</span></span>
+            </div>
+            <div class="w-full h-1.5 bg-slate-200 rounded-full overflow-hidden">
+              <div class="h-full rounded-full" style="width:${pct}%;background:${barColor};"></div>
+            </div>
+          </button>
+        `;
+      }).join('');
+
+      document.getElementById('btn-clear-filter').classList.toggle('hidden', !selectedCityFilter);
+    }
+
+    function toggleCityFilter(city) {
+      if (selectedCityFilter === city) {
+        clearCityFilter();
+        return;
+      }
+      selectedCityFilter = city;
+      applyFilter(true);
+    }
+
+    function clearCityFilter() {
+      selectedCityFilter = null;
+      applyFilter(true);
+    }
+
+    function fitAllMarkers() {
+      if (filteredCustomers.length === 0) return;
+      const bounds = L.latLngBounds(filteredCustomers.map(c => [c.Latitude, c.Longitude]));
+      map.fitBounds(bounds, { padding: [70, 70], maxZoom: 13 });
+    }
+
+    // 4. Zona Kepadatan (Heatmap Circle Overlay)
+    function toggleDensityZones() {
+      showDensity = !showDensity;
+      const btn = document.getElementById('btn-density');
+      if (showDensity) {
+        btn.classList.add('bg-amber-500', 'text-white', 'border-amber-500');
+        btn.classList.remove('bg-white/95', 'text-slate-700');
+      } else {
+        btn.classList.remove('bg-amber-500', 'text-white', 'border-amber-500');
+        btn.classList.add('bg-white/95', 'text-slate-700');
+      }
+      renderDensityZones();
+    }
+
+    function renderDensityZones() {
+      densityLayerGroup.clearLayers();
+      if (!showDensity) return;
+
+      const cityGroups = {};
+      filteredCustomers.forEach(c => {
+        if (!cityGroups[c.Cityname]) cityGroups[c.Cityname] = [];
+        cityGroups[c.Cityname].push(c);
+      });
+
+      Object.entries(cityGroups).forEach(([city, items]) => {
+        const avgLat = items.reduce((s, i) => s + i.Latitude, 0) / items.length;
+        const avgLng = items.reduce((s, i) => s + i.Longitude, 0) / items.length;
+        const count = items.length;
+        const radius = 8000 + count * 6500;
+        const zoneColor = count >= 3 ? '#ef4444' : count === 2 ? '#f59e0b' : '#10b981';
+
+        L.circle([avgLat, avgLng], {
+          radius,
+          color: zoneColor,
+          weight: 1.5,
+          fillColor: zoneColor,
+          fillOpacity: 0.22
+        }).bindTooltip(`Zona ${city}: ${count} titik populasi`).addTo(densityLayerGroup);
+      });
+    }
+
+    // 5. Right Drawer Customer Profile
+    function openProfileDrawer(cust) {
+      activeCustomer = cust;
+      const sameCityCount = allCustomers.filter(c => c.Cityname === cust.Cityname).length;
+      const pctCity = ((sameCityCount / allCustomers.length) * 100).toFixed(1);
+
+      document.getElementById('prof-region-badge').textContent = cust.Region;
+      document.getElementById('prof-custid').textContent = cust.CustomerID;
+      document.getElementById('prof-projid').textContent = cust.Projectid;
+      document.getElementById('prof-projname').textContent = cust.Projectname;
+      document.getElementById('prof-region').textContent = cust.Region;
+      document.getElementById('prof-city').textContent = cust.Cityname;
+      document.getElementById('prof-subdistrict').textContent = cust.Subdistrictname || '-';
+      document.getElementById('prof-lat').textContent = cust.Latitude.toFixed(7);
+      document.getElementById('prof-lng').textContent = cust.Longitude.toFixed(7);
+      document.getElementById('prof-density-note').textContent =
+        `Terdapat ${sameCityCount} titik (${pctCity}% dari total populasi) di wilayah ${cust.Cityname}.`;
+
+      document.getElementById('btn-gmaps').href =
+        `https://www.google.com/maps/search/?api=1&query=${cust.Latitude},${cust.Longitude}`;
+      document.getElementById('btn-streetview').href =
+        `https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${cust.Latitude},${cust.Longitude}`;
+
+      document.getElementById('profile-drawer').classList.remove('translate-x-[120%]');
+    }
+
+    function closeProfileDrawer() {
+      document.getElementById('profile-drawer').classList.add('translate-x-[120%]');
+    }
+
+    // Klik area kosong peta menutup drawer profil
+    map.on('click', () => {
+      closeProfileDrawer();
+    });
+
+    function toggleSummaryBody() {
+      const body = document.getElementById('summary-body');
+      const icon = document.getElementById('summary-chevron');
+      body.classList.toggle('hidden');
+      icon.classList.toggle('fa-chevron-up');
+      icon.classList.toggle('fa-chevron-down');
+    }
+
+    function copyText(elementId) {
+      const text = document.getElementById(elementId).textContent;
+      navigator.clipboard.writeText(text);
+      showToast(`Customer ID ${text} tersalin!`);
+    }
+
+    function copyCoordinates() {
+      if (!activeCustomer) return;
+      const coord = `${activeCustomer.Latitude}, ${activeCustomer.Longitude}`;
+      navigator.clipboard.writeText(coord);
+      showToast(`Koordinat ${coord} tersalin!`);
+    }
+
+    function showToast(msg) {
+      const toast = document.getElementById('toast');
+      toast.textContent = msg;
+      toast.classList.remove('opacity-0');
+      setTimeout(() => toast.classList.add('opacity-0'), 2200);
+    }
+
+    // Jalankan sinkronisasi pertama kali saat halaman dibuka
+    syncFromGitHub();
+  </script>
+</body>
+</html>
